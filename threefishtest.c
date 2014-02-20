@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
     const uint8_t * passphrase_p;
     char inputFilename[80], outputFilename[80];
     const char * inputFilename_p = (const char *)(&outputFilename[0]);
-    char * p_3fish = "_3fish";
+    char * p_3fish = "3fish";
     char * foundString;
     int direction;
     size_t bytesRead;
@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
     // now check whether the file ends with _3fish.  If it does then we
     // need to decrypt the file, otherwise we will encrypt the file.
 
-    if (memcmp(&inputFilename[strlen(inputFilename)-6], p_3fish, 6)) {
+    if (memcmp(&inputFilename[strlen(inputFilename)-5], p_3fish, 5)) {
 
         direction = ENCRYPT;
 
@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
         // myBlockW contains first block of encrypted data to write
         // reset the key with the new tweak
         threefishSetKey(&myKey, Threefish512, &myKeyData[0], &myTweakData[0]);
-        strcat(outputFilename, "_3fish");
+        strcat(outputFilename, ".3fish");
     }
     else
     {
