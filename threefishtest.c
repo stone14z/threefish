@@ -22,7 +22,7 @@
 //    port this code to any other OS nor to add any GUI.
 //
 //    The simply encrypts and decrypts individual files.  It encrypts if the passed file
-//    does not end with the string "_3fish" otherwise it decrypts.
+//    does not end with the string ".3fish" otherwise it decrypts.
 //
 //    Only the 512 bit block size is used.  The cipher is used in ctr mode.  The algorithm
 //    is described below.
@@ -33,12 +33,12 @@
 //    and the seconds and nanoseconds since midnight January 1st, 1970.  The time data forms a nonce
 //    to ensure that a file never encrypts the same way twice.  The first 128 bits of this block
 //    get used as the initial tweak that gets used to encrypt the second block.  The next 64 bits
-//    contain the number of byte in the file; this is used during decryption.  This first block is
+//    contain the number of bytes in the file; this is used during decryption.  This first block is
 //    encrypted with a tweak value of zero.
 //
 //    Note: storing the file size in the initial block is non-standard and might allow for a
 //          cryptanalytic attack that I am not aware of at this time. I assumed, possibly erroneously,
-//          that this would not introduce additional weakness in the algorithm sinve the block
+//          that this would not introduce additional weakness in the algorithm since the block
 //          gets encrypted
 //
 //    The second block is the passphrase.  It is encrypted using the itself as the key and the
@@ -58,7 +58,7 @@
 //
 //    After running "make", just "sudo cp threefishtest /bin/3fish" then the command
 //    "3fish passphrase filename" can be run from anywhere on any file.  The output
-//    will be filename_3fish.  To decrypt, just run the command "3fish passphrase filename_3fish".
+//    will be filename_3fish.  To decrypt, just run the command "3fish passphrase filename.3fish".
 //
 ///////////////////////////////////////////////////////////////////////////////
 
