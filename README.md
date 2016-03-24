@@ -1,7 +1,7 @@
 threefish
 =========
 
-Encrypt a file using threefish in CTR mode.
+Encrypt a file using threefish in TAE mode.
 
 This is a simple program written to run from the command line in Linux.  It takes
 two arguments, passpharse and filename.  If the filename does not end with "_3fish"
