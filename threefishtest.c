@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <time.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -24,15 +24,15 @@
 //    The simply encrypts and decrypts individual files.  It encrypts if the passed file
 //    does not end with the string ".3fish" otherwise it decrypts.
 //
-//    Only the 512 bit block size is used.  The cipher is used in ctr mode.  The algorithm
-//    is described below.
+//    Only the 512 bit block size is used.  The cipher is used in Tweakable Authenticated Encryption
+//    (TAE) mode.  The algorithm is described below.
 //
 //    The key is generated as the 524287th generation 512-bit Skein hash of the passphrase.
 //
 //    The first block is built from the Skein hash of the concatenation of the filename, the passphrase,
 //    and the seconds and nanoseconds since midnight January 1st, 1970.  The time data forms a nonce
 //    to ensure that a file never encrypts the same way twice.  The first 128 bits of this block
-//    get used as the initial tweak that gets used to encrypt the second block.  The next 64 bits
+//    get used as the initial tweak (Nonce) that gets used to encrypt the second block.  The next 64 bits
 //    contain the number of bytes in the file; this is used during decryption.  This first block is
 //    encrypted with a tweak value of zero.
 //
@@ -41,12 +41,16 @@
 //          that this would not introduce additional weakness in the algorithm since the block
 //          gets encrypted
 //
-//    The second block is the passphrase.  It is encrypted using the itself as the key and the
-//    first 128 bits of plaintext from the first block as the tweak.
+//    The second block is the passphrase.  It is encrypted using itself as the key and the
+//    first 128 bits (Nonce) of plaintext from the first block as the tweak.
 //
 //    The file is encrypted by incrementing the tweak value, reading the next 64 bytes of the file,
 //    encrypting the those bytes, and continuing.  If the file does not end on a 64 byte boundary then
 //    the block is zero padded.  
+//
+//    During encryption and decryption the 512-hash of the plaintext is calculated.  On encryption, this
+//    has is encrypted as the last block of ciphertext.  On decryption, the last block of cipher text
+//    is decrypted and compared to the hash, generating an authentication failure on mismatch.
 //
 //    The reason for the > 500,000 hash generations to get the key is that, on my machine, anything
 //    less than this and I could not detect, visually, any delay in the output when decrypting a 64 byte
@@ -75,10 +79,11 @@ int main(int argc, char *argv[])
     uint64_t packedIV[SKEIN_MAX_STATE_WORDS];
     uint8_t hashVal[SKEIN_512_STATE_BYTES];
     uint8_t hashHold[SKEIN_512_STATE_BYTES];
+    uint8_t mac[SKEIN_512_STATE_BYTES];
     uint8_t unpackedTime[SKEIN_512_STATE_BYTES];
     ThreefishKey_t  myKey;
     FILE * inputFile = NULL, * outputFile = NULL;
-    SkeinCtx_t ctx;
+    SkeinCtx_t ctx, mac_ctx;
     const uint8_t * passphrase_p;
     char inputFilename[80], outputFilename[80];
     const char * inputFilename_p = (const char *)(&outputFilename[0]);
@@ -90,7 +95,7 @@ int main(int argc, char *argv[])
     uint64_t fileSize = SKEIN_512_STATE_BYTES;
     int bytesToWrite, i;
     int decryptIndex;
-    struct timespec currentTime;
+    struct timeval currentTime;
     struct stat buf;
 
     memset(myBlockR, 0, sizeof(myBlockR));
@@ -103,8 +108,8 @@ int main(int argc, char *argv[])
 
     // we are expecting "prog passphrase filename"
     if (argc < 3)  {
-       printf ("passphrase and filename expected\n");
-       return 1;
+        printf ("passphrase and filename expected\n");
+        return 1;
     }
 
     passphrase_p = (const uint8_t*)argv[1];
@@ -115,7 +120,9 @@ int main(int argc, char *argv[])
     // the HASHREPS hash of the passphrase to the stored 2nd block
     // the HASHREPS hash of the passphrase is the master key and
     // will be used with a tweak of 0 for encrypt/decrypting the IV
+    skeinCtxPrepare(&mac_ctx, Skein512);
     skeinCtxPrepare(&ctx, Skein512);
+    skeinInit(&mac_ctx, Skein512);
     skeinInit(&ctx, Skein512);
     skeinUpdate(&ctx, passphrase_p, strlen(argv[1]));
     skeinFinal(&ctx, &hashHold[0]); 
@@ -147,7 +154,7 @@ int main(int argc, char *argv[])
 
         direction = ENCRYPT;
 
-        clock_gettime(CLOCK_REALTIME, &currentTime);
+        gettimeofday(&currentTime, NULL);
         Skein_Put64_LSB_First(myBlockW, (void *)&currentTime, sizeof(currentTime));
 
         // set up the IV by hashing the passphrase, filename, and time
@@ -231,6 +238,7 @@ int main(int argc, char *argv[])
             if (bytesRead < SKEIN_512_STATE_BYTES) {
                 myBlockR[bytesRead] = SKEIN_512_STATE_BYTES - bytesRead -1;
             }
+            skeinUpdate(&mac_ctx, myBlockR, bytesRead);  // add to MAC
             threefishEncryptBlockBytes(&myKey, myBlockR, myBlockW);
         }
         else
@@ -241,6 +249,7 @@ int main(int argc, char *argv[])
                 bytesToWrite = fileSize;
                 fileSize = 0;
             }
+            skeinUpdate(&mac_ctx, myBlockW, bytesToWrite);  // add to MAC
         }
 
         if (bytesRead && bytesToWrite)
@@ -253,11 +262,34 @@ int main(int argc, char *argv[])
         // if this was the last block then don't bother reading again
         if (bytesRead < SKEIN_512_STATE_BYTES) break;
     }
+    skeinFinal(&mac_ctx, &mac[0]); 
+
+    // increment the tweak for the MAC
+    if (++myTweakData[0] == 0) ++myTweakData[1];
+    threefishSetKey(&myKey, Threefish512, &myKeyData[0], &myTweakData[0]);
+
+    if (ENCRYPT == direction) {  // add the encrypted MAC to the output
+        threefishEncryptBlockBytes(&myKey, mac, myBlockW);
+        fwrite((void *)myBlockW, 1, SKEIN_512_STATE_BYTES, outputFile);
+    } else {  // test for authentication
+        bytesRead = fread((void *)myBlockR, 1, SKEIN_512_STATE_BYTES, inputFile);
+        if (bytesRead) {
+            threefishDecryptBlockBytes(&myKey, myBlockR, myBlockW);
+            for (i=0; i<64; i++){
+                if (myBlockW[i] == mac[i]) continue;
+                printf("Authentication Failure\n");
+                break;
+            }
+            if (i == 64) printf("Authenticated\n");
+        } else {
+            printf("Unauthenticated\n");
+        }
+    }
 
     fclose(inputFile);
     fclose(outputFile);
 
-// clear out RAM
+    // clear out RAM
 
     memset(myBlockR, 0, sizeof(myBlockR));
     memset(myBlockW, 0, sizeof(myBlockW));
