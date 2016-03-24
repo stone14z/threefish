@@ -25,6 +25,9 @@ The createFile.sh uses the linux dd utility to generate a testfile.txt that is
 null filled.  The hexdump utility can then be used to examine the cipher text
 that is generated.
 
-Most of the code comes from teh wernerd submission.  I have added a Makefile,
-threefishtest.c (the CTR mode file encryptor), and the createFile.sh.
-
+Most of the code comes from the wernerd submission.  I have added a Makefile,
+threefishtest.c (the TAE mode file encryptor), and the createFile.sh.  The mode
+is a slightly modified version of the TAE mode as described in "Tweable Block
+Ciphers" by Moses Liskov, Ronald Rivest, and David Wagner.  Instead of xor'ing
+the blocks of plaintext together to get a checksum, the Skein
+hash of the plaintext is computed.
