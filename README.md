@@ -27,7 +27,7 @@ that is generated.
 
 Most of the code comes from the wernerd submission.  I have added a Makefile,
 threefishtest.c (the TAE mode file encryptor), and the createFile.sh.  The mode
-is a slightly modified version of the TAE mode as described in "Tweable Block
+is a slightly modified version of the TAE mode as described in "Tweakable Block
 Ciphers" by Moses Liskov, Ronald Rivest, and David Wagner.  Instead of xor'ing
 the blocks of plaintext together to get a checksum, the Skein
 hash of the plaintext is computed.
