@@ -30,11 +30,11 @@
 //    The key is generated as the 524287th generation 512-bit Skein hash of the passphrase.
 //
 //    The first block is built from the Skein hash of the concatenation of the filename, the passphrase,
-//    and the seconds and nanoseconds since midnight January 1st, 1970.  The time data forms a nonce
-//    to ensure that a file never encrypts the same way twice.  The first 128 bits of this block
-//    get used as the initial tweak (Nonce) that gets used to encrypt the second block.  The next 64 bits
-//    contain the number of bytes in the file; this is used during decryption.  This first block is
-//    encrypted with a tweak value of zero.
+//    the seconds and nanoseconds since midnight January 1st, 1970, and 100 bytes of data from urandom.  
+//    The time data forms a nonce to ensure that a file never encrypts the same way twice.  The first 128
+//    bits of this block get used as the initial tweak (Nonce) that gets used to encrypt the second block.  
+//    The next 64 bits contain the number of bytes in the file; this is used during decryption.  This 
+//    first block is encrypted with a tweak value of zero.
 //
 //    Note: storing the file size in the initial block is non-standard and might allow for a
 //          cryptanalytic attack that I am not aware of at this time. I assumed, possibly erroneously,
@@ -45,14 +45,14 @@
 //    first 128 bits (Nonce) of plaintext from the first block as the tweak.
 //
 //    The file is encrypted by incrementing the tweak value, reading the next 64 bytes of the file,
-//    encrypting the those bytes, and continuing.  If the file does not end on a 64 byte boundary then
+//    encrypting those bytes, and continuing.  If the file does not end on a 64 byte boundary then
 //    the block is zero padded.  
 //
 //    During encryption and decryption the 512-hash of the plaintext is calculated.  On encryption, this
-//    has is encrypted as the last block of ciphertext.  On decryption, the last block of cipher text
+//    hash is encrypted as the last block of ciphertext.  On decryption, the last block of cipher text
 //    is decrypted and compared to the hash, generating an authentication failure on mismatch.
 //
-//    The reason for the > 500,000 hash generations to get the key is that, on my machine, anything
+//    The reason for the > 500,000 hash generations is to get a key that, on my machine, anything
 //    less than this and I could not detect, visually, any delay in the output when decrypting a 64 byte
 //    file.  I wanted to make this algorithm toughened against a brute force attack which requires
 //    computational complexity.  My "yardstick" was whether I could see a delay after starting the
@@ -63,6 +63,7 @@
 //    After running "make", just "sudo cp threefishtest /bin/3fish" then the command
 //    "3fish passphrase filename" can be run from anywhere on any file.  The output
 //    will be filename_3fish.  To decrypt, just run the command "3fish passphrase filename.3fish".
+//    If the passphrase contains spaces that it will need to be quoted.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -97,6 +98,13 @@ int main(int argc, char *argv[])
     int decryptIndex;
     struct timeval currentTime;
     struct stat buf;
+// for use with urandom
+    FILE *randomData;
+    char myRandomData[100];
+
+    randomData = fopen("/dev/urandom", "r");
+    fread(myRandomData, 1, 100, randomData);
+    fclose (randomData);
 
     memset(myBlockR, 0, sizeof(myBlockR));
     memset(myBlockW, 0, sizeof(myBlockW));
@@ -157,12 +165,14 @@ int main(int argc, char *argv[])
         gettimeofday(&currentTime, NULL);
         Skein_Put64_LSB_First(myBlockW, (void *)&currentTime, sizeof(currentTime));
 
-        // set up the IV by hashing the passphrase, filename, and time
-        // The time is #second in Epoch and nanoseconds
+        // set up the IV by hashing the passphrase, filename, time, and random data
+        // where time is #second in Epoch and nanoseconds
+        // and random data is 100 bytes read from urandom
         skeinInit(&ctx, Skein512);
         skeinUpdate(&ctx, passphrase_p, strlen(argv[1]));
         skeinUpdate(&ctx, (const uint8_t *)inputFilename, strlen(inputFilename));
         skeinUpdate(&ctx, myBlockW, sizeof(currentTime));
+        skeinUpdate(&ctx, (const uint8_t *)myRandomData, 100);
         skeinFinal(&ctx, &myBlockR[0]);
 
         // the tweak is the first 3 words, we will put the filelength
@@ -204,7 +214,7 @@ int main(int argc, char *argv[])
     }
 
     // now we can clear the passphrase from memory
-    memset(argv[1], 0, sizeof(argv[1]));
+    memset(argv[1], 0, strlen(argv[1]));
 
     if ((outputFile = fopen(outputFilename, "wb")) == NULL) {
         printf("Could not open %s\n", argv[2]);
