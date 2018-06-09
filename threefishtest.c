@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <../argon2/include/argon2.h>
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -66,13 +67,22 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
+#define ITERATIONS 150
+#define MEMORY 50000
+#define THREADS 4
+#define HASHLEN 64
+#define SALTLEN 16
 
 #define ENCRYPT 1
 #define DECRYPT 2
 #define HASHREPS 0x7ffff
 
+
 int main(int argc, char *argv[])
 {
+    uint8_t hash1[HASHLEN];
+    uint8_t salt[SALTLEN];
+
     uint8_t myBlockR[SKEIN_512_STATE_BYTES], myBlockW[SKEIN_512_STATE_BYTES];
     uint8_t myRandomP[SKEIN_512_STATE_BYTES], myRandomC[SKEIN_512_STATE_BYTES];
     uint64_t myKeyData[SKEIN_MAX_STATE_WORDS], myTweakData[SKEIN_MAX_STATE_WORDS];
@@ -100,7 +110,9 @@ int main(int argc, char *argv[])
 // for use with urandom
     FILE *randomData;
     char myRandomData[100];
-    char myPassphrase[2048];
+    unsigned char myPassphrase[2048];
+
+    memset( salt, 0x3c, SALTLEN );
 
     randomData = fopen("/dev/urandom", "r");
     fread(myRandomData, 1, 100, randomData);
@@ -142,11 +154,21 @@ int main(int argc, char *argv[])
     skeinCtxPrepare(&mac_ctx, Skein512);
     skeinCtxPrepare(&ctx, Skein512);
     skeinInit(&mac_ctx, Skein512);
-    skeinInit(&ctx, Skein512);
-    skeinUpdate(&ctx, passphrase_p, strlen(passphrase_p));
-    skeinFinal(&ctx, &hashHold[0]); 
+//    skeinInit(&ctx, Skein512);
+//    skeinUpdate(&ctx, passphrase_p, strlen(passphrase_p));
+//    skeinFinal(&ctx, &hashHold[0]); 
 
-    for (i = 0; i < HASHREPS; i++) {
+    argon2id_hash_raw( ITERATIONS, MEMORY, THREADS, passphrase_p, strlen(myPassphrase), salt, SALTLEN, hash1, HASHLEN);
+
+//    printf("first part of argon hash 0x");
+    for (i=0; i<HASHLEN; i++) {
+//        printf("%02x", hash1[i]);
+        hashHold[i] = hash1[i];
+    }
+//    printf("\n");
+
+
+    for (i = 0; i < 1; i++) {
         skeinInit(&ctx, Skein512);
         skeinUpdate(&ctx, &hashHold[0], SKEIN_512_STATE_BYTES);
         skeinFinal(&ctx, &hashVal[0]); 
@@ -316,6 +338,7 @@ int main(int argc, char *argv[])
     memset(unpackedTime, 0, sizeof(unpackedTime));
     memset(hashHold, 0, sizeof(hashHold));
     memset(hashVal, 0, sizeof(hashVal));
+    memset(myPassphrase, 0, sizeof(myPassphrase));
     memset((void *)&myKey, 0, sizeof(myKey));
 
     return 0;
