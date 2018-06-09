@@ -28,14 +28,16 @@
 //    Only the 512 bit block size is used.  The cipher is used in Tweakable Authenticated Encryption
 //    (TAE) mode.  The algorithm is described below.
 //
-//    The key is generated as the 524287th generation 512-bit Skein hash of the passphrase.
+//    The key using Argon2 with the iteration count, memory, and threads chosen so that key generation 
+//    takes approximately 3.5s on a core i7 (iMac).  The resulting key is then hashed on final time
+//    with Skein t arrive at the final key.
 //
 //    The first block is built from the Skein hash of the concatenation of the filename, the passphrase,
-//    and the seconds and nanoseconds since midnight January 1st, 1970.  The time data forms a nonce
-//    to ensure that a file never encrypts the same way twice.  The first 128 bits of this block
-//    get used as the initial tweak (Nonce) that gets used to encrypt the second block.  The next 64 bits
-//    contain the number of bytes in the file; this is used during decryption.  This first block is
-//    encrypted with a tweak value of zero.
+//    100 bytes from urandom, and the seconds and nanoseconds since midnight January 1st, 1970.  The time 
+//    data forms a nonce to ensure that a file never encrypts the same way twice.  The first 128 bits of 
+//    this block get used as the initial tweak (Nonce) that gets used to encrypt the second block.  The 
+//    next 64 bits contain the number of bytes in the file; this is used during decryption.  This first 
+//    block is encrypted with a tweak value of zero.
 //
 //    Note: storing the file size in the initial block is non-standard and might allow for a
 //          cryptanalytic attack that I am not aware of at this time. I assumed, possibly erroneously,
@@ -50,16 +52,8 @@
 //    the block is zero padded.  
 //
 //    During encryption and decryption the 512-hash of the plaintext is calculated.  On encryption, this
-//    has is encrypted as the last block of ciphertext.  On decryption, the last block of cipher text
+//    hash is encrypted as the last block of ciphertext.  On decryption, the last block of cipher text
 //    is decrypted and compared to the hash, generating an authentication failure on mismatch.
-//
-//    The reason for the > 500,000 hash generations to get the key is that, on my machine, anything
-//    less than this and I could not detect, visually, any delay in the output when decrypting a 64 byte
-//    file.  I wanted to make this algorithm toughened against a brute force attack which requires
-//    computational complexity.  My "yardstick" was whether I could see a delay after starting the
-//    program before the prompt came back.  The reason for encrypting the key as the second block
-//    was to make it easy to discern whether a valid passphrase has been entered without requiring
-//    the user to decrypt the entire file first.
 //
 //    After running "make", just "sudo cp threefishtest /bin/3fish" then the command "3fish filename" 
 //    can be run from anywhere on any file.  The output will be filename_3fish.  To decrypt, just run 
@@ -154,18 +148,12 @@ int main(int argc, char *argv[])
     skeinCtxPrepare(&mac_ctx, Skein512);
     skeinCtxPrepare(&ctx, Skein512);
     skeinInit(&mac_ctx, Skein512);
-//    skeinInit(&ctx, Skein512);
-//    skeinUpdate(&ctx, passphrase_p, strlen(passphrase_p));
-//    skeinFinal(&ctx, &hashHold[0]); 
 
     argon2id_hash_raw( ITERATIONS, MEMORY, THREADS, passphrase_p, strlen(myPassphrase), salt, SALTLEN, hash1, HASHLEN);
 
-//    printf("first part of argon hash 0x");
     for (i=0; i<HASHLEN; i++) {
-//        printf("%02x", hash1[i]);
         hashHold[i] = hash1[i];
     }
-//    printf("\n");
 
 
     for (i = 0; i < 1; i++) {
