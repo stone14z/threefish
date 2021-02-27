@@ -61,9 +61,12 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#define ITERATIONS 150
-#define MEMORY 50000
-#define THREADS 4
+//#define ITERATIONS 150
+//#define MEMORY 50000
+//#define THREADS 4
+#define ITERATIONS 35
+#define MEMORY 640000
+#define THREADS 8
 #define HASHLEN 64
 #define SALTLEN 16
 
