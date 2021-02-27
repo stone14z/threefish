@@ -55,7 +55,7 @@
 //    hash is encrypted as the last block of ciphertext.  On decryption, the last block of cipher text
 //    is decrypted and compared to the hash, generating an authentication failure on mismatch.
 //
-//    After running "make", just "sudo cp threefishtest /bin/3fish" then the command "3fish filename" 
+//    After running "make", just "sudo cp threefishtest /usr/local/bin/3fish" then the command "3fish filename" 
 //    can be run from anywhere on any file.  The output will be filename_3fish.  To decrypt, just run 
 //    the command "3fish filename.3fish".  The program will prompt for a passphrase.
 //
